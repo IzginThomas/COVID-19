@@ -32,6 +32,7 @@ use the implementations provided here, please **also** cite this repository as
 
 ## Abstract
 
+In this study, five distinct COVID-19 models developed in different countries, each designed to reflect the prevailing epidemiological condition at the time of formulation, are examined. The models are reformulated while still maintaining their original structure, using their common transmissions from one compartment to the other. Modified Patankar--Runge--Kutta (MPRK) methods are then applied to approximate the solutions of the resulting system of nonlinear ordinary differential equations (ODEs) representing each model to produce unconditionally positive approximations and to preserve the conservative part of the ODEs. In particular, we incorporate the numerical solution into a cost function to improve the estimates for the model hyperparameters. As a proof-of-concept, we apply our approach to improve the parameters of a paper concerned with modeling COVID-19 in Ghana.
 
 
 ## Numerical experiments
@@ -65,7 +66,7 @@ Everything is provided as is and without warranty. Use at your own risk!
 
 
 
-# ML-TimeStepControl
+# COVID-19
 
 
 
