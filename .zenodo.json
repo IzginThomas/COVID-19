@@ -1,0 +1,18 @@
+{
+    "license": "MIT",
+    "title": "Reproducibility repository for Using Machine Learning to Design Time Step Size Controllers for Stable Time Integrators",
+    "upload_type": "software",
+    "creators": [
+        {
+            "affiliation": "University of Kassel",
+            "name": "Thomas Izgin",
+            "orcid": "0000-0003-3235-210X"
+        },
+        {
+	          "affiliation": "Institute of Mathematics, Johannes Gutenberg University Mainz, Germany",
+            "name": "Ranocha, Hendrik",
+            "orcid": "0000-0002-3456-2277" 
+        }
+    ],
+    "access_right": "open"
+}
