@@ -8,7 +8,7 @@ in the article
 ```bibtex
 @online{AIM2026,
       title={Using Machine Learning to Enhance Hyperparameter Optimazation in Pandemic Modeling: Case study of COVID-19 Dynamics in Ghana}, 
-      author={Isaac Azure and Thomas Izgin and Hendrik Ranocha},
+      author={Isaac Azure and Thomas Izgin and Andreas Meister},
       year={2026},
       eprint={TODO},
       archivePrefix={arXiv},
@@ -23,7 +23,7 @@ use the implementations provided here, please **also** cite this repository as
 @misc{AIM202&repository,
   title={Reproducibility repository for
          "Using Machine Learning to Enhance Hyperparameter Optimazation in Pandemic Modeling: Case study of COVID-19 Dynamics in Ghana"},
-  author={Azure, Isaac and Izgin, Thomas and Ranocha, Hendrik},
+  author={Azure, Isaac and Izgin, Thomas and Meister, Andreas},
   year={2026},
   howpublished={\url{https://github.com/IzginThomas/COVID-19}},
   doi={10.5281/zenodo.20298147}
