@@ -49,9 +49,9 @@ described in the `README.md` file therein.
 
 
 ## Authors
-- [Isaac Azure](https://webapps.knust.edu.gh/staff/dirsearch/profile/summary/4d1bc4eb13e6.html) (Kwame Nkrumah University of Science and Technology - KNUST, Ghana)
 - [Thomas Izgin](https://uni-kassel.de/go/izgin) (University of Kassel, Germany)
 - [Andreas Meister](https://www.uni-kassel.de/fb10/institute/mathematik/arbeitsgruppen/analysis-und-angewandte-mathematik/prof-dr-andreas-meister/team/detailseite.html?tx_ukpersons_personfunctiondetail%5Bcfpid%5D=41557&tx_ukpersons_personfunctiondetail%5BpersonFunction%5D=129&cHash=fb750321314a2c0920ef8cbe5db3c57d) (University of Kassel, Germany)
+- [Isaac Azure](https://webapps.knust.edu.gh/staff/dirsearch/profile/summary/4d1bc4eb13e6.html) (Kwame Nkrumah University of Science and Technology - KNUST, Ghana)
 
 
 ## License
