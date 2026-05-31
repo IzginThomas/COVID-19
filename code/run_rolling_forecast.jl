@@ -800,7 +800,7 @@ for T_forecast in T_forecasts
     end
   txt_font = 17
     title_font = 18
-    label_font = 15
+    label_font = 18
     ax.set_xlabel(
         "Forecast start time",
         fontsize=txt_font,
@@ -1001,13 +1001,13 @@ for T_forecast in T_forecasts
     )
 
     ax4.set_ylabel(
-        "Relative Error (I & D_covid)",
+        "Relative Error (I & \$D_{covid}\$)",
         fontsize=txt_font,
         fontweight="bold"
     )
 
     ax4.set_title(
-        "Rolling Forecast Performance ($T_forecast Days, I and D_covid vs Numerical Reference)",
+        "Rolling Forecast Performance ($T_forecast Days, I and \$D_{covid}\$ vs Numerical Reference)",
         fontsize=title_font,
         fontweight="bold"
     )

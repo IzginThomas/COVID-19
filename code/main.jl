@@ -18,7 +18,7 @@ using Trapz
 # u0 erweitert um Index 11 (D_covid startet bei 0.0)
 u0 = [30416000.0, 0.0, 5.0, 5.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; # will be updated in optimization 
 original_u0 = u0; # used for non-autonomous case to keep the same initial conditions
-comp_labels = ["S", "V", "E", "L", "I", "H", "R", "Q", "D", "Ve", "D_covid"];
+comp_labels = ["S", "V", "E", "L", "I", "H", "R", "Q", "D", "Ve", "\$D_{covid}\$"];
 maxiteration = 150;
 const BACKUP_ID = "backupI"; # identifier for backup files to distinguish from other runs
 

@@ -17,7 +17,7 @@ using Trapz
 using Printf
   txt_font = 17
     title_font = 18
-    label_font = 15
+    label_font = 18
 println("--- Starting Forecast Pipeline ---")
 
 _local_suffix = isdefined(Main, :forecast_suffix) ? Main.forecast_suffix : ""
@@ -453,14 +453,16 @@ ax1.set_title("Infected Population (I) Forecast Comparison", fontsize=title_font
 ax1.set_xlabel("Days t", fontsize=txt_font)
 ax1.set_ylabel("Infected", fontsize=txt_font)
 ax1.grid(true, linestyle=":", alpha=0.5)
-ax1.legend(loc="upper left")
+ax1.tick_params(axis="both", labelsize=label_font)
+ax1.legend(loc="upper left", fontsize=label_font)
 
 # Styling ax2
-ax2.set_title("COVID Deaths (D_covid) Forecast Comparison", fontsize=title_font, fontweight="bold")
+ax2.set_title("COVID Deaths (\$D_{covid}\$) Forecast Comparison", fontsize=title_font, fontweight="bold")
 ax2.set_xlabel("Days t", fontsize=txt_font)
 ax2.set_ylabel("Deaths", fontsize=txt_font)
 ax2.grid(true, linestyle=":", alpha=0.5)
-ax2.legend(loc="upper left")
+ax2.tick_params(axis="both", labelsize=label_font)
+ax2.legend(loc="upper left", fontsize=label_font)
 
 plt.tight_layout()
 _fc_base1 = "forecast_comparison_$(BACKUP_ID)_db$(data_bound)_T$(T_forecast)$(_local_suffix)"
