@@ -15,7 +15,9 @@ using PositiveIntegrators
 using PyPlot
 using Trapz
 using Printf
-
+  txt_font = 17
+    title_font = 18
+    label_font = 15
 println("--- Starting Forecast Pipeline ---")
 
 _local_suffix = isdefined(Main, :forecast_suffix) ? Main.forecast_suffix : ""
@@ -365,9 +367,13 @@ rank_markers = [
     "h", "p"
 ]
 
+# Fixed colors for the top-3 ranks; fall back to tab10 for any extras
+rank_colors = ["#1a7a1a", "#1f77b4", "#ff7f0e"]  # dark green (1st), blue (2nd), orange (3rd)
+
 for (rank, label) in enumerate(methods_to_plot)
 
-    c =
+    c = rank <= length(rank_colors) ?
+        rank_colors[rank] :
         rank_cmap(
             (rank - 1) /
             max(length(methods_to_plot) - 1, 1)
@@ -419,7 +425,7 @@ if !isempty(tref_I) && !isempty(refI)
         ax1.scatter(tref_I[valid_I_hist], refI[valid_I_hist], color="#546e7a", s=20, alpha=0.5, label="Data (Historical)", zorder=5)
     end
     if !isempty(valid_I_fore)
-        ax1.scatter(tref_I[valid_I_fore], refI[valid_I_fore], color="#d32f2f", marker="o", s=35, label="Data (Forecast)", zorder=5)
+        ax1.scatter(tref_I[valid_I_fore], refI[valid_I_fore], color="#d32f2f", marker="o", s=35, label="Data (Forecast)", zorder=1)
     end
 end
 
@@ -431,7 +437,7 @@ if !isempty(tref_D) && !isempty(refD)
         ax2.scatter(tref_D[valid_D_hist], refD[valid_D_hist], color="#546e7a", s=20, alpha=0.5, label="Data (Historical)", zorder=5)
     end
     if !isempty(valid_D_fore)
-        ax2.scatter(tref_D[valid_D_fore], refD[valid_D_fore], color="#d32f2f", marker="o", s=35, label="Data (Forecast)", zorder=5)
+        ax2.scatter(tref_D[valid_D_fore], refD[valid_D_fore], color="#d32f2f", marker="o", s=35, label="Data (Forecast)", zorder=1)
     end
 end
 
@@ -443,16 +449,16 @@ ax2.axvline(x=t_end, color="black", linestyle="--", linewidth=1.5, alpha=0.8)
 ax2.text(t_end + 1.0, ax2.get_ylim()[2] * 0.9, " ", fontsize=10, fontweight="bold", zorder=10)
 
 # Styling ax1
-ax1.set_title("Infected Population (I) Forecast Comparison", fontsize=14, fontweight="bold")
-ax1.set_xlabel("Days t", fontsize=12)
-ax1.set_ylabel("Infected", fontsize=12)
+ax1.set_title("Infected Population (I) Forecast Comparison", fontsize=title_font, fontweight="bold")
+ax1.set_xlabel("Days t", fontsize=txt_font)
+ax1.set_ylabel("Infected", fontsize=txt_font)
 ax1.grid(true, linestyle=":", alpha=0.5)
 ax1.legend(loc="upper left")
 
 # Styling ax2
-ax2.set_title("COVID Deaths (D_covid) Forecast Comparison", fontsize=14, fontweight="bold")
-ax2.set_xlabel("Days t", fontsize=12)
-ax2.set_ylabel("Deaths", fontsize=12)
+ax2.set_title("COVID Deaths (D_covid) Forecast Comparison", fontsize=title_font, fontweight="bold")
+ax2.set_xlabel("Days t", fontsize=txt_font)
+ax2.set_ylabel("Deaths", fontsize=txt_font)
 ax2.grid(true, linestyle=":", alpha=0.5)
 ax2.legend(loc="upper left")
 

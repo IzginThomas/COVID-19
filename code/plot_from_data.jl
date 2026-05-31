@@ -1,197 +1,42 @@
-module ParameterPredictor
-
-using LinearAlgebra
-using Statistics
-
-export predict_until_time
-
-function predict_single_step(pred_matrix::Matrix{Float64}, pred_h::Vector{Float64}, max_search_idx::Int, L::Int, min_duration::Float64, gamma::Float64)
-    num_vars, N_total = size(pred_matrix)
-    
-    current_state = pred_matrix[:, end]
-    current_trend = pred_matrix[:, end] .- pred_matrix[:, end-1]
-    
-    distances = Float64[]
-    valid_indices = Int[]
-    
-    for t_idx in 2:max_search_idx
-        historical_state = pred_matrix[:, t_idx]
-        historical_trend = pred_matrix[:, t_idx] .- pred_matrix[:, t_idx-1]
-        
-        # 1. EUCLIDEAN PARAMETER DISTANCE (Sum of squares)
-        # Every parameter contributes to the distance metric.
-        sum_sq_dist = sum((current_state .- historical_state).^2)
-        dist_abs = sqrt(sum_sq_dist)
-        
-        # 2. Euclidean Trend Distance
-        dist_trend = sqrt(sum((current_trend .- historical_trend).^2))
-        
-        # 3. Dynamic Direction Protection
-        direction_penalty = 0.0
-        for v in 1:num_vars
-            if current_trend[v] * historical_trend[v] < 0.0
-                if abs(current_trend[v]) > 1e-4
-                    importance = max(0.0, current_state[v])
-                    direction_penalty += 5.0 * importance
-                end
-            end
-        end
-        
-        # Total distance calculation balanced by gamma weighting
-        total_dist = dist_abs + gamma * dist_trend + direction_penalty
-        
-        push!(distances, total_dist)
-        push!(valid_indices, t_idx)
-    end
-    
-    effective_L = min(L, length(valid_indices))
-    if effective_L == 0
-        return pred_matrix[:, end], mean(pred_h[1:max_search_idx])
-    end
-    
-    sorted_indices = sortperm(distances)
-    L_nearest_indices = valid_indices[sorted_indices[1:effective_L]]
-    L_nearest_distances = distances[sorted_indices[1:effective_L]]
-    
-    weights = zeros(effective_L)
-    twin_count = sum(L_nearest_distances .< 1e-12)
-    
-    if twin_count > 0
-        for k in 1:effective_L
-            if L_nearest_distances[k] < 1e-12
-                weights[k] = 1.0 / twin_count
-            else
-                weights[k] = 0.0
-            end
-        end
-    else
-        shift = mean(L_nearest_distances) * 0.1
-        inverse_dist = 1.0 ./ (L_nearest_distances .+ shift)
-        weights = inverse_dist / sum(inverse_dist)
-    end
-    
-    next_state = zeros(num_vars)
-    next_duration = 0.0
-    
-    for k in 1:effective_L
-        hist_idx = L_nearest_indices[k]
-        successor_idx = hist_idx + 1
-        w = weights[k]
-        
-        next_state .+= w .* pred_matrix[:, successor_idx]
-        
-        # Enforce non-negativity constraint
-        for v in 1:num_vars
-            if next_state[v] < 0.0
-                next_state[v] = 0.0
-            end
-        end
-        
-        next_duration += w * pred_h[successor_idx]
-    end
-    
-    if next_duration < min_duration
-        next_duration = min_duration
-    end
-    
-    return next_state, next_duration
-end
-
-function predict_until_time(param_matrix_base::Matrix{Float64}, h_widths_base::Vector{Float64}, X_interfaces_base::Vector{Float64}, target_end_time::Float64; L::Int=3, min_duration::Float64=7.0, gamma::Float64=1.0)
-    N_real = size(param_matrix_base, 2)
-    pred_matrix = copy(param_matrix_base)
-    pred_h = copy(h_widths_base)
-    pred_X = copy(X_interfaces_base)
-    current_time = pred_X[end]
-    
-    if current_time >= target_end_time
-        return pred_matrix, pred_h, pred_X
-    end
-    
-    println("\n=== Starting Iterative Forecasting (Euclidian Balanced) ===")
-    step_counter = 0
-    
-    while current_time < target_end_time
-        step_counter += 1
-        max_search_idx = (N_real - 1) - (step_counter - 1)
-        
-        if max_search_idx < 3
-            remaining_duration = target_end_time - current_time
-            current_time = target_end_time
-            pred_h[end] += remaining_duration
-            pred_X[end] = target_end_time
-            break
-        end
-        
-        next_params, next_duration = predict_single_step(pred_matrix, pred_h, max_search_idx, L, min_duration, gamma)
-        
-        if current_time + next_duration > target_end_time
-            remaining = target_end_time - current_time
-            if remaining < min_duration && step_counter > 1
-                pred_h[end] += remaining
-                pred_X[end] = target_end_time
-                current_time = target_end_time
-                break
-            else
-                next_duration = remaining
-            end
-        end
-        
-        current_time += next_duration
-        push!(pred_h, next_duration)
-        push!(pred_X, current_time)
-        pred_matrix = hcat(pred_matrix, next_params)
-    end
-    
-    return pred_matrix, pred_h, pred_X
-end
-
-end # module ParameterPredictor
-
-
-# =====================================================================
-# MAIN EXECUTION SCRIPT
-# =====================================================================
-
 using DelimitedFiles
-using LinearAlgebra # Important for pinv() in the new WENO function
+using LinearAlgebra # Wichtig für pinv() in der neuen WENO-Funktion
 
 if !@isdefined(BACKUP_ID)
     BACKUP_ID = "backupI"
 end
 
 base_p = all_models[Model_no];
-println("--- Loading optimization data from CSV backups (BACKUP_ID: $BACKUP_ID)... ---")
+println("--- Lade Optimierungsdaten aus den CSV-Backups (BACKUP_ID: $BACKUP_ID)... ---")
 midpoints = vec(DelimitedFiles.readdlm("midpoints_$(BACKUP_ID).csv", ',', Float64))
 param_matrix = DelimitedFiles.readdlm("param_matrix_$(BACKUP_ID).csv", ',', Float64)
-println("Data successfully loaded!")
+println("Daten erfolgreich geladen!")
 
-println("--- Reconstructing time interpolation functions ---")
+println("--- Rekonstruiere Zeit-Interpolationsfunktionen ---")
 interpolated_funcs = []
 num_opt_vars = length(opt_positions_filtered)
 
 # --------------------------------===================================
-# NEW: Derive grid metrics from cell midpoints for the WENO module
+# NEU: Gitter-Metrik aus den Mittelpunkten für das WENO-Modul ableiten
 # --------------------------------===================================
-# Since we only saved the cell midpoints, we reconstruct the cell boundaries (interfaces).
-# For a uniform or near-uniform optimization time-grid:
+# Da wir nur die Zellmittelpunkte gespeichert haben, rekonstruieren wir die Zellgrenzen (Interfaces).
+# Für ein gleichmäßiges oder fast gleichmäßiges Optimierungs-Zeitgitter:
 N_cells = length(midpoints)
 
 if N_cells > 1
-    # Calculate the step sizes between midpoints
+    # Berechne die Schrittweite zwischen den Mitten
     dt_mid = diff(midpoints)
-    # Use the first difference as an approximation for boundary cell widths
+    # Verwende die erste Differenz als Näherung für die Rand-Zellweiten
     dt_start = dt_mid[1]
     dt_end = dt_mid[end]
     
-    # Reconstruct interfaces (cell boundaries)
+    # Rekonstruktion der Interfaces (Zellgrenzen)
     X_interfaces = zeros(N_cells + 1)
     X_interfaces[1] = 0.0
-    for i in 1:N_cells
+     for i in 1:N_cells
         X_interfaces[i+1] = 2.0 * midpoints[i] - X_interfaces[i]
     end
     
-    # Compute exact cell widths (delta_x)
+    # Exakte Zellweiten delta_x berechnen
     h_widths = diff(X_interfaces)
 else
     X_interfaces = [midpoints[1] - 0.5, midpoints[1] + 0.5]
@@ -206,7 +51,7 @@ end
 
 
 
-using Interpolations # If desired for spline-based approaches
+using Interpolations # Falls für spline-basierte Ansätze gewünscht
 
 function evaluate_piecewise(t::Float64, midpoints::Vector{Float64}, h_widths::Vector{Float64}, 
                             X_interfaces::Vector{Float64}, y_values::Vector{Float64}, k::Int; 
@@ -215,7 +60,7 @@ function evaluate_piecewise(t::Float64, midpoints::Vector{Float64}, h_widths::Ve
     
     N = length(y_values)
     
-    # 1. CENTRAL INDEX DETERMINATION
+    # 1. ZENTRALE INDEX-BESTIMMUNG
     if t <= X_interfaces[1]
         i = 1
     elseif t >= X_interfaces[end]
@@ -241,67 +86,69 @@ function evaluate_piecewise(t::Float64, midpoints::Vector{Float64}, h_widths::Ve
         elseif t >= X_interfaces[end]
             v_raw = y_values[end]
         else
-            # --- MATHEMATICALLY CORRECT CONSERVATIVE RECONSTRUCTION ---
-            # We calculate interface values V_face such that continuity 
-            # AND mean-value preservation are guaranteed across the equation system.
+            # --- MATHEMATISCH KORREKTE KONSERVATIVE REKONSTRUKTION ---
+            # Wir berechnen die Interface-Werte V_face so, dass Stetigkeit 
+            # UND Mittelwerterhaltung über das Gleichungssystem gesichert sind.
             V_face = zeros(N + 1)
             
-            # Since we have a non-uniform grid, we use the standard FVD
-            # (Finite Volume Reconstruction) derivation for continuous linear profiles:
+            # Da wir ein ungleichmäßiges Gitter haben, nutzen wir die Standard-
+            # FVD-Herleitung (Finite Volume Reconstruction) für stetige lineare Profile:
             for j in 2:N
-                # Distance from the center of the left cell to the center of the right cell
+                # Abstand von der Mitte der linken Zelle zur Mitte der rechten Zelle
                 dx_m2m = midpoints[j] - midpoints[j-1]
-                # Weighting based on the distance from midpoints to interface surfaces
+                # Gewichtung basierend auf den Abständen der Mittelpunkte zu den Grenzflächen
                 V_face[j] = ((midpoints[j] - X_interfaces[j]) * y_values[j-1] + 
                              (X_interfaces[j] - midpoints[j-1]) * y_values[j]) / dx_m2m
             end
             
-            # Enforce exact mean-value preservation for boundary cells
+            # Jetzt zwingen wir die Randzellen zur exakten Mittelwerterhaltung
             V_face[1]   = 2.0 * y_values[1] - V_face[2]
             V_face[end] = 2.0 * y_values[end] - V_face[end-1]
             
-            # Correction step for the interior cells:
-            # To ensure the cell mean value is EXACTLY accurate in cell i, the profile slope must be corrected.
-            # A purely interpolated V_face ensures continuity but slightly biases the mean value.
-            # We shift the line parallelly to guarantee the exact mean value:
+            # Korrektur-Schritt für das Innere:
+            # Damit in Zelle i der Mittelwert EXACT stimmt, muss der Verlauf korrigiert werden.
+            # Ein rein interpoliertes V_face sichert Stetigkeit, verfälscht aber den Mittelwert leicht.
+            # Wir verschieben die Linie parallel, um den exakten Mittelwert zu garantieren:
             v_L_temp = V_face[i]
             v_R_temp = V_face[i+1]
             temp_avg = 0.5 * (v_L_temp + v_R_temp)
             
-            # Error discrepancy relative to the target cell mean
+            # Der Fehler zum gewünschten Zellmittelwert
             delta_avg = y_values[i] - temp_avg
             
-            # Corrected, exact mean-preserving endpoints for this specific cell
+            # Die korrigierten, exakt mittelwerterhaltenden Endpunkte für diese Zelle
             v_L = v_L_temp + delta_avg
             v_R = v_R_temp + delta_avg
             
-            # Linear function implementation inside the interval
+            # Lineare Funktion im Intervall
             t_L = X_interfaces[i]
             v_raw = v_L + (v_R - v_L) * (t - t_L) / h_widths[i]
         end
+        
+   # ... (Zentrale Indexbestimmung bleibt gleich) ...
 
     elseif method_type == :constant
         if t <= X_interfaces[1]
             v_raw = y_values[1]
         elseif t >= X_interfaces[end]
             # ----------------------------------------------------------------
-            # FUTURE EXTRAPOLATION (t > end_time)
+            # ZUKUNFTS-EXTRAPOLATION (t > end_time)
             # ----------------------------------------------------------------
-            # Option A: Maintain status quo (value of the last optimized cell)
+            # Option A: Status Quo halten (Wert der letzten optimierten Zelle)
             v_raw = y_values[end]
             
-            # Option B (Alternative): Return to static base value from base_p
-            # For this, you would pass the base value as 'default_value' to the function:
+            # Option B (Alternativ): Rückkehr zum statischen Basiswert aus base_p
+            # Dafür müsstest du den Basiswert als 'default_value' an die Funktion übergeben:
             # v_raw = default_value 
         else
-            # Normal range inside the data grid bounds
+            # Normaler Bereich innerhalb des Daten-Gitters
             v_raw = y_values[i]
         end
     else
-        error("Unknown interpolation type: :$(method_type)")
+        error("Unbekannter Interpolationstyp: :$(method_type)")
     end
 
-    # 3. CENTRAL ZHANG-SHU LIMITER
+    # 3. ZENTRALER ZHANG-SHU LIMITER
     if apply_zhang_shu
         v_avg = y_values[i]
         if v_raw < lower_bound
@@ -317,20 +164,20 @@ end
 
 
 
-println("--- Reconstructing time interpolation functions ---")
+println("--- Rekonstruiere Zeit-Interpolationsfunktionen ---")
 interpolated_funcs = []
 num_opt_vars = length(opt_positions_filtered)
 
-# --- CONFIGURATION REGION FOR RECONSTRUCTION ---
-chosen_method    = :weno   # Options: :weno, :linear, :constant
-weno_k           = 2       # k=2 for WENO-3, k=3 for WENO-5
-limit_positivity = true    # Activate Zhang-Shu Limiter
+# --- CONFIG-BEREICH FÜR DIE REKONSTRUKTION ---
+gewaehlte_methode = :weno  # Optionen: :weno, :linear, :constant
+weno_k           = 2     # k=2 für WENO-3, k=3 für WENO-5
+limit_positivity = true   # Zhang-Shu-Limiter aktivieren
 
 for j in 1:num_opt_vars
     y_values = param_matrix[j, :]
     
     if length(midpoints) > 1
-        # The anonymous function now dynamically accesses our all-round wrapper
+        # Die anonyme Funktion greift jetzt dynamisch auf unseren Allround-Wrapper zu
         itp = t -> evaluate_piecewise(
             t, 
             midpoints, 
@@ -338,7 +185,7 @@ for j in 1:num_opt_vars
             X_interfaces, 
             y_values, 
             weno_k; 
-            method_type = chosen_method,
+            method_type = gewaehlte_methode,
             apply_zhang_shu = limit_positivity, 
             lower_bound = 0.0
         )
@@ -347,9 +194,9 @@ for j in 1:num_opt_vars
     end
     push!(interpolated_funcs, itp)
 end
-println("Interpolation functions successfully generated using method [:", chosen_method, "]!")
+println("Interpolationsfunktionen erfolgreich mit Methode [:", gewaehlte_methode, "] erstellt!")
 
-# Local wrappers for the non-autonomous dynamics
+# Lokale Wrapper für die nicht-autonomen Dynamiken
 function P_non_autonomous_load(u, p_static, t)
     p_dynamic = copy(p_static)
     for j in 1:num_opt_vars
@@ -366,7 +213,7 @@ function d_non_autonomous_load(u, p_static, t)
     return d(u, Tuple(p_dynamic), t)
 end
 
-println("--- Solving the final non-autonomous differential equation from backup ---")
+println("--- Löse die finale, nicht-autonome Differentialgleichung aus Backup ---")
 if !@isdefined(original_u0)
     original_u0 = [30416000.0, 0.0, 5.0, 5.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 end
@@ -377,7 +224,7 @@ end
 final_prob_load = PDSProblem(P_non_autonomous_load, d_non_autonomous_load, original_u0, (0.0, end_time), base_p)
 final_sol_load = solve(final_prob_load, method)
 
-# Call plot execution (uses plot_res defined in test_modul_bayesian_tools.jl)
+# Plot aufrufen (nutzt das in test_modul_bayesian_tools.jl definierte plot_res)
 local_sols = @isdefined(local_solutions_history) ? local_solutions_history : nothing
 plot_res(final_sol_load, base_p, interpolated_funcs, local_sols=local_sols)
 
@@ -390,7 +237,7 @@ if !isdefined(Main, :AntigravityHeadless)
 end
 
 
-# # 1. Helper function to generate valid LaTeX strings for Matplotlib
+# # 1. Hilfsfunktion zur Erzeugung valider LaTeX-Strings für Matplotlib
 function format_param_latex(name::String)
     chars = collect(name)
     len = length(chars)
@@ -403,26 +250,26 @@ function format_param_latex(name::String)
         end
     end
 
-    # If parameter name is short (e.g., "μ", "γ", "x")
+    # Wenn der Name extrem kurz ist (z. B. "μ", "γ", "x")
     if len < 3
         return "\$$(name)\$"
     end
 
     name_str = String(chars)
 
-    # Rule for variables ending with "Ve" (e.g., "rIVe", "rLVe", "μVe")
+    # Regel für Variablen mit "Ve" am Ende (z. B. "rIVe", "rLVe", "μVe")
     if endswith(name_str, "Ve")
         if len >= 4
-            base = string(chars[1])            # e.g., 'r'
-            sup = String(chars[2:(end-2)])     # e.g., 'I' or 'L'
+            base = string(chars[1])            # z. B. 'r'
+            sup = String(chars[2:(end-2)])     # z. B. 'I' oder 'L'
             return "\$$(base)^$(sup)_{V_E}\$"
         else
-            # For 3-character parameters like "μVe" -> \mu_{V_E}
+            # Für 3-Zeichen-Parameter wie "μVe" -> \mu_{V_E}
             return "\$$(String(chars[1:(end-2)]))_{V_E}\$"
         end
     end
 
-    # Rule for standard 3+ character variables (e.g., "aEL" -> a^E_L)
+    # Regel für standardmäßige 3+ Zeichen-Variablen (z. B. "aEL" -> a^E_L)
     m = match(r"^([a-z])([A-Z])([A-Z])$", name_str)
     if m !== nothing
         return "\$$(m.captures[1])^$(m.captures[2])_$(m.captures[3])\$"
@@ -431,7 +278,7 @@ function format_param_latex(name::String)
     return "\$$(name_str)\$"
 end
 
-# 2. Define the original list of all parameter names
+# 2. Originalliste aller Parameternamen definieren
 parameters = [
     "k1", "k2", "cS", "cV", "cE", "cL", "cI", "cH", "cR", "cQ",
     "cVe", "δV", "δE", "δL", "δH", "δQ", "pv", "Λ", "μ", "φ",
@@ -440,14 +287,14 @@ parameters = [
     "aHR", "aRS", "aQR", "b01","b02","b03","b04","b11","b12","b13", "b14","ω1", "ω2"
 ]
 
-# 3. Extract the original numerical values from x_model for optimized indices
+# 3. Die numerischen Originalwerte aus x_model für die optimierten Indizes ziehen
 original_vals = x_model
 
-# 4. Fetch text labels from names array and transform to LaTeX formats
+# 4. Text-Labels aus dem Namens-Array holen und in LaTeX transformieren
 raw_opt_names = parameters[opt_positions_filtered]
 formatted_opt_names = format_param_latex.(raw_opt_names)
 
-# # 5. Include module and trigger plotter execution
+# # 5. Modul einbinden und den Plotter aufrufen
  include("WenoPlotter.jl")
  using .WenoPlotter: plot_weno_parameters
 
@@ -456,50 +303,51 @@ WenoPlotter.plot_weno_parameters(
     param_matrix, 
     interpolated_funcs,
     weno_k; 
-    opt_positions_filtered = formatted_opt_names, # Passing pure LaTeX strings for titles
-    original_values = original_vals,               # Passing constants for horizontal reference lines (axhline)
+    opt_positions_filtered = formatted_opt_names, # Übergabe der reinen LaTeX-Namen für den Titel
+    original_values = original_vals,               # Übergabe der Konstanten für die axhline
     backup_id = BACKUP_ID,
     end_time = end_time
 )
 
 ##
 
-# ... (Loading backups remains as before) ...
+# ... (Laden der Backups wie gehabt) ...
 
-# Include the new prediction module defined above
-# include("ParameterPredictor.jl") # (Already present within execution memory block)
+# Bindest das neue Modul ein
+include("ParameterPredictor.jl")
 using .ParameterPredictor: predict_until_time
 
-# --- YOUR TARGET END TIME FOR FORECASTING ---
-target_forecast_end = 223.0  # How long should the total simulation run? (e.g., 120 days)
+# --- DEINE WUNSCH-ENDZEIT FÜR DIE VORHERSAGE ---
+wunsch_prognose_ende = 223.0  # Wie weit soll die Simulation INSGESAMT laufen? (z.B. 120 Tage)
 
-# Execute iterative prediction steps
-L_neighbors          = 1      # How many historical patterns to blend together
-min_time_window      = 1.0    # Every future step interval spans at least 1.0 day
-trend_weight         = 1.5
+# Führe die iterative Prognose aus
+#wunsch_prognose_ende = 120.0  # Ziel-Zeitpunkt in Tagen (Gesamtlaufzeit)
+L_nachbarn           = 1     # Wie viele historische Muster gemischt werden sollen
+mindest_zeitfenster  = 1.0    # Jedes Zukunfts-Intervall ist mindestens 7 Tage lang
+trend_gewicht        = 1.5
 
 expanded_param_matrix, expanded_h_widths, expanded_X_interfaces = predict_until_time(
     param_matrix, 
     h_widths, 
     X_interfaces, 
-    target_forecast_end; # <-- Watch the semicolon placement!
-    L = L_neighbors, 
-    min_duration = min_time_window, 
-    gamma = trend_weight
+    wunsch_prognose_ende; # <-- Semikolon beachten!
+    L = L_nachbarn, 
+    min_duration = mindest_zeitfenster, 
+    gamma = trend_gewicht
 )
 
-# Since we now have an extended true grid layout, compute the expanded midpoints
-# for internal profile processing evaluation (if needed, e.g., for plotting tasks)
+# Da wir nun ein verlängertes, echtes Gitter haben, berechnen wir die erweiterten Mittelpunkte 
+# für die interne Auswertung (falls benötigt, z.B. für Plots)
 expanded_midpoints = [0.5 * (expanded_X_interfaces[i] + expanded_X_interfaces[i+1]) for i in 1:length(expanded_h_widths)]
 
 
-# --- GENERATION OF WRAPPER FUNCTIONS (Now parsing the expanded structural matrices!) ---
-println("--- Creating time-continuous wrapper pipelines for the ODE solver ---")
+# --- ERSTELLUNG DER FUNKTIONEN (Nutzt jetzt die erweiterten Daten!) ---
+println("--- Erstelle zeit-kontinuierliche Wrapper für die ODE ---")
 interpolated_funcs = []
 num_opt_vars = length(opt_positions_filtered)
 
 for j in 1:num_opt_vars
-    # We pass the EXPANDED structural parameter arrays from the Predictor engine into evaluate_piecewise
+    # Wir übergeben der evaluate_piecewise die ERWEITERTEN Arrays aus dem Predictor
     y_values_expanded = expanded_param_matrix[j, :]
     
     itp = t -> evaluate_piecewise(
@@ -509,10 +357,33 @@ for j in 1:num_opt_vars
         expanded_X_interfaces, 
         y_values_expanded, 
         weno_k; 
-        method_type = :constant, # Piecewise constant behavior performs best here
+        method_type = :constant, # Da stückweise konstant am besten ist
         apply_zhang_shu = limit_positivity, 
         lower_bound = 0.0
     )
     push!(interpolated_funcs, itp)
 end
 
+
+# --- LÖSE DIE ODE BIS ZUR PROGNOSE-ENDZEIT ---
+# println("--- Löse finale ODE mit prognostiziertem Parameter-Verlauf ---")
+# final_prob_load = PDSProblem(
+#     P_non_autonomous_load, 
+#     d_non_autonomous_load, 
+#     original_u0, 
+#     (0.0, wunsch_prognose_ende), # <-- Hier deine neue Zielzeit
+#     base_p
+# )
+# final_sol_load = solve(final_prob_load, method)
+
+# Plotten (Der Plotter visualisiert automatisch das gesamte verlängerte Fenster)
+# plot_res(final_sol_load, base_p, interpolated_funcs, local_sols=local_solutions_history)
+
+
+# WenoPlotter.plot_weno_parameters(
+#     expanded_midpoints, 
+#     expanded_param_matrix, 
+#     interpolated_funcs; 
+#     opt_positions_filtered = formatted_opt_names, # Übergabe der reinen LaTeX-Namen für den Titel
+#     original_values = original_vals                # Übergabe der Konstanten für die axhline
+# )

@@ -86,12 +86,12 @@ if date_match !== nothing && count_match !== nothing
     date_block = date_match.captures[1]
     count_block = count_match.captures[1]
 
-    
+    # 3. USE REGEX TO EXTRACT DATES
     # This looks for patterns like: Month Day, Year (e.g., Feb 15, 2020)
     # It ignores quotes, commas, and newlines entirely.
     date_elements = collect(m.match for m in eachmatch(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", date_block))
 
-    
+    # 4. USE REGEX TO EXTRACT NUMBERS
     # This grabs any sequences of digits
     count_elements = collect(m.match for m in eachmatch(r"\d+", count_block))
 
@@ -115,7 +115,9 @@ else
 end
 
 
-# Infected (I) 
+# Infected (I) - cumulative
+#df_infected = CSV.read("cumulative_Infected.txt", DataFrame);#; limit=read_idx) # read only the first read_idx rows
+# filter out rows with dates in 2025 or 2026
 df_I = filter(row ->  row.Date > first_date && row.Date <= limit_date, df_I);
 
 
@@ -154,7 +156,7 @@ refN = Float64.([
 
 #### All models
 # === PARAMETER VALUES === #
-
+:b01,:b02,:b03,:b11,:b12,:b13,:ω
 model1 = [0.0, 0.0, #k1, k2
         0.0,0.0,0.0, 6.038e-8 * 0.62811041, 6.038e-8,0.0,0.0,0.0,4.00199e-8, # =p, i.e. coefficients in aSE
           0.0,1.0,1.0,0.0,0.0, 0.0,1319.294,0.000042578,0.01000001,1.0,0.00500005,0.29,  

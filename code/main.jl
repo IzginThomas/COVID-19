@@ -2,6 +2,7 @@ include("opt_vars.jl");
 include("bayesian_tools.jl");
 include("get_data_new.jl");
 include("weno.jl")
+# include("weno_test.jl")
 
 using .WenoInterpolation: weno_evaluate_non_uniform
 using DelimitedFiles
@@ -14,13 +15,14 @@ using LinearAlgebra
 using Interpolations
 using Dates
 using Trapz
-
+# u0 erweitert um Index 11 (D_covid startet bei 0.0)
 u0 = [30416000.0, 0.0, 5.0, 5.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; # will be updated in optimization 
 original_u0 = u0; # used for non-autonomous case to keep the same initial conditions
 comp_labels = ["S", "V", "E", "L", "I", "H", "R", "Q", "D", "Ve", "D_covid"];
 maxiteration = 150;
 const BACKUP_ID = "backupI"; # identifier for backup files to distinguish from other runs
 
+#tspan = (0.0, tref_IRHD[end]); # replace with real data time span
 method = MPRK22(1.0);
 
 # NEW
@@ -84,7 +86,7 @@ function P(u, p, t)
     aSE = sum(u .* pp) * (sum(u))^round(k1) * β0 * (1 .+ β1 * cos(pi * t / (365.0 * ω1 + 1) + (ω2 - pi)^2))
     aVE = aVE * aSE^round(k2)
 
-    Pmat = zeros(eltype(u), 11, 11) 
+    Pmat = zeros(eltype(u), 11, 11) # Matrix auf 11x11 vergrößert
 
     # ==================== Production-rest terms ==================== #
     r1p = (1 - pv) * Λ
@@ -113,7 +115,7 @@ function P(u, p, t)
     Pmat[8, 4] = aLQ * L
     Pmat[8, 5] = aIQ * I
 
-    # D
+    # Zustand 9 (D) behält die allgemeine/natürliche Mortalität
     Pmat[9, 1] = μ * S
     Pmat[9, 2] = μ * round(δV) * V
     Pmat[9, 3] = μ * round(δE) * E
@@ -123,13 +125,67 @@ function P(u, p, t)
     Pmat[9, 7] = μ * R
     Pmat[9, 8] = μ * round(δQ) * Q
 
-    # D_covid
+    # 🔥 NEU: Kompartiment 11 (D_covid) sammelt NUR die COVID-Todesfälle aus I und H
     Pmat[11, 5] = αI * I
     Pmat[11, 6] = αH * H
 
     return Pmat
 end;
+#=
+function P(u, p, t)
+    S, V, E, L, I, H, R, Q, D, Ve = u
+    k1, k2, cS, cV, cE, cL, cI, cH, cR, cQ,
+    cVe, δV, δE, δL, δH, δQ, pv, Λ, μ, φ,
+    ψ, γ, μVe, αI, αH, aSV, aVS, aVE, aEI, aES,
+    aEQ, aEL, aLI, aLR, aLQ, rLVe, aIR, aIQ, aIH, rIVe,
+    aHR, aRS, aQR, b01,b02,b03,b04,b11,b12,b13,b14,ω1,ω2 = p
 
+    pp = [cS, cV, cE, cL, cI, cH, cR, cQ, 0.0, cVe] 
+    β0 = b01 * (1 + (b02-1)^2*cos(pi*t/(365.0*b03 + 1) + (b04-pi)^2)); # default: b01 = 1, b02 = 1, b03 = 1, b04 = 1
+    β1 = (b11-1)^2 * (1 + (b12-1)^2*cos(pi*t/(365.0*b13 + 1) + (b14-pi)^2)); # default: b11 = 1, b12 = 1, b13 = 1, b14 = 1
+    aSE = sum(u .* pp) * (sum(u))^round(k1) * β0 *(1 .+ β1*cos(pi*t/(365.0*ω1 + 1) + (ω2-pi)^2)); # default ω1= 1, ω2 = 1
+    aVE = aVE * aSE^round(k2)
+
+    Pmat = zeros(eltype(u), 10, 10) 
+
+    # ==================== Production-rest terms ==================== #
+    r1p = (1 - pv) * Λ
+    r2p = pv * Λ
+    r10p = rLVe * L + rIVe * I
+    Pmat[1, 1] = r1p
+    Pmat[2, 2] = r2p
+    Pmat[10, 10] = r10p
+
+    # ==================== Production terms ==================== #
+    Pmat[1, 2] = aVS * V
+    Pmat[1, 3] = aES * E
+    Pmat[1, 7] = aRS * R
+    Pmat[2, 1] = aSV * S
+    Pmat[3, 1] = aSE * S
+    Pmat[3, 2] = aVE * V
+    Pmat[4, 3] = aEL * (1 - φ) * E
+    Pmat[5, 3] = aEI * φ * E
+    Pmat[5, 4] = aLI * γ * L
+    Pmat[6, 5] = aIH * (1 - ψ) * I
+    Pmat[7, 4] = aLR * (1 - γ) * L
+    Pmat[7, 5] = aIR * ψ * I
+    Pmat[7, 6] = aHR * H
+    Pmat[7, 8] = aQR * Q
+    Pmat[8, 3] = aEQ * E
+    Pmat[8, 4] = aLQ * L
+    Pmat[8, 5] = aIQ * I
+    Pmat[9, 1] = μ * S
+    Pmat[9, 2] = μ * round(δV) * V
+    Pmat[9, 3] = μ * round(δE) * E
+    Pmat[9, 4] = μ * round(δL) * L
+    Pmat[9, 5] = (μ + αI) * I
+    Pmat[9, 6] = (μ * round(δH) + αH) * H
+    Pmat[9, 7] = μ * R
+    Pmat[9, 8] = μ * round(δQ) * Q
+
+    return Pmat
+end;
+=#
 
 function d(u, p, t)
     S, V, E, L, I, H, R, Q, D, Ve, D_covid = u
@@ -154,11 +210,14 @@ function cost(x)
         "ψ", "γ", "μVe", "αI", "αH", "aSV", "aVS", "aVE", "aEI", "aES",
         "aEQ", "aEL", "aLI", "aLR", "aLQ", "rLVe", "aIR", "aIQ", "aIH", "rIVe",
         "aHR", "aRS", "aQR", "b01", "b02", "b03", "b04", "b11", "b12", "b13", "b14", "ω1", "ω2"]
- 
+    # NEW
     x_all = all_models[Model_no] # get the full parameter vector for the chosen model
+    #x_all = zeros(length(parameters)) # initialize full parameter vector with zeros
+    #x_all[z_positions] .= 0.0; # set zero parameters to zero
+    #x_all[nz_delta] .= 1.0
     x_all[opt_positions_filtered] = x # update only the parameters from the optimization
 
-   
+    # END NEW
     tab = DataFrame(
         Parameter=params,
         Model=x_all,
@@ -178,9 +237,14 @@ function cost(x)
         aEQ, aEL, aLI, aLR, aLQ, rLVe, aIR, aIQ, aIH, rIVe,
         aHR, aRS, aQR, b01, b02, b03, b04, b11, b12, b13, b14, ω1, ω2)
     prob = PDSProblem(P, d, u0, tspan, p)
-
+    #if isdefined(Main, :dt0)
     sol = solve(prob, method)
+    #else
+    #    sol = solve(prob, method)
+    #end;
 
+    # u =  S, V, E, L, I, H, R, Q, D, Ve 
+    # tref_V = 2 , tref_S = 1, tref_IRHD = 5, 6,7,9
     # error calculation
     err = zeros(eltype(weights), 11)
     for i in 1:11
@@ -226,15 +290,33 @@ function cost(x)
             err[i] = 1e16 # if no data is available for this compartment, set error to zero
         end
     end
+    #trans_numsol = dense_numsol # some transformation if needed to compare with data (e.g. summation of a compartment over time)
+
     return sum(err)
 end
 println("Cost of Model 1: ", cost(x_model))
 
+#=
+D = 43; # number of parameters
+# set bounds dependend on dimension
 
+bounds = fill(1.0, (2, D));
+bounds[1, :] = bounds[1, :] * 0.0;
+#bounds[2, 23:D] = bounds[2, 23:D] * 1e-1; # TRY TO SET REALISTIC BOUNDS FOR THE PROBLEM, THIS GREATLY AFFECTS THE OPTIMIZATION RESULTS
+bounds[1, 1] = -1.0; # lower bound for k1
+#bounds[2,1] = 0.0; #  k1 = 0 for model 1
+#bounds[2,2] = 0.0; #  k2 = 0 for model 1
+bounds[2, 18] = 2e3;     # upper bound for Λ  
+bounds[2, 19] = 1e-3;     # upper bound for μ 
+#bounds[1,18] = 1319.294;
+bounds = bounds[:, nz_positions_delta]
+=#
+
+# NEW
 bounds = fill(1.0, (2, length(x_model)));
 bounds[1, :] = x_model' * 0.0; # lower bounds set to zero
 bounds[2, :] = min.(x_model' * 2.0, 1.0); # upper bounds set to twice the initial values, but not exceeding 1.0
-
+# END NEW
 
 
 function plot_res(sol, base_p, parameter_kurven=nothing; local_sols=nothing)
@@ -245,12 +327,13 @@ function plot_res(sol, base_p, parameter_kurven=nothing; local_sols=nothing)
     plt.figure()
     colors = []
 
-
+    # 1. Schleife: Simulationsergebnisse (WENO3 Kontinuierlich) plotten
     for idx in 1:length(sol.u[1])
-        if !(idx == 5 && flag_I || idx == 11 && flag_D) 
+        if !(idx == 5 && flag_I || idx == 11 && flag_D) # Nur plotten, wenn Daten vorhanden
             continue
         end
 
+        # HIER REKONSTRUIEREN WIR DIE DYNAMISCHEN PARAMETER FÜR GETPLOTVAR:
         if parameter_kurven !== nothing
             num_opt_vars = length(opt_positions_filtered)
             y_num = Vector{Float64}(undef, length(t))
@@ -267,24 +350,33 @@ function plot_res(sol, base_p, parameter_kurven=nothing; local_sols=nothing)
                 y_num[k] = full_res[1]
             end
         else
+            # Klassischer, statischer Aufruf (falls keine Kurven übergeben wurden)
             y_num = getplotvar(t, sol.u, base_p, idx)
         end
 
-
+        # Kontinuierliche WENO3-Lösung plotten
         line, = plt.plot(t, y_num, label=comp_labels[idx], linewidth=2)
         current_color = line.get_color()
         push!(colors, (idx, current_color))
 
-
+        # --- NEU: STÜCKWEISE LOKALE TRAJEKTORIEN HIER ZUFÜGEN ---
         if local_sols !== nothing
             for (b_idx, sol_block) in enumerate(local_sols)
+                # Da die Blöcke statische Parameter nutzen, werten wir sie direkt aus
+                # Wir holen uns die Parameter aus dem Block (falls im Problem gespeichert)
+                # oder nutzen das statische base_p, da die lokalen Lösungen das p bereits intern tragen.
                 y_block = getplotvar(sol_block.t, sol_block.u, sol_block.prob.p, idx)
+
+                # Nur beim ersten Block ein Label setzen, um die Legende nicht zu überladen
                 block_label = (b_idx == 1) ? (comp_labels[idx] * " (Piecewise)") : ""
+
+                # Gepunktet (":") in der exakt gleichen Farbe wie die kontinuierliche Kurve
                 plt.plot(sol_block.t, y_block, linestyle="-", color="black", alpha=0.9, linewidth=1.5, label=block_label)
             end
         end
     end
 
+    # 2. Schleife: Reale Referenzdaten filtern und plotten
     for (i, col) in colors
         if i == 5 && flag_I
             tref = tref_I
@@ -329,13 +421,21 @@ end
 
 ##
 
+"""
+Führt die fensterbasierte Parameteroptimierung in variablen Schritten aus.
+Wenn der minimale Fehlerwert eines Fensters über 0.25 liegt, wird das Intervall 
+halbiert und die Berechnung wiederholt –- es sei denn, die Schrittweite ist bereits 3.0.
+"""
 function run_rolling_optimization_and_solve(cost_func, end_time::Float64, bounds_matrix, max_iter::Int, initial_step_size::Float64; resume_from_backup::Bool=false)
     # Speicher für optimierte Parametervektoren, zeitliche Mittelpunkte und Kosten
     optimized_params_history = Vector{Vector{Float64}}()
     midpoints = Float64[]
-    costs_history = Float64[] 
+    costs_history = Float64[] # Historie für die akzeptierten Kosten
+    
+    # --- Speicher für die stückweisen lokalen Lösungen ---
     local_solutions_history = []
 
+    # Startwert u0 wird initial vom globalen u0-Vektor kopiert
     current_u0 = copy(u0)
 
     t_start = 0.0
@@ -350,7 +450,7 @@ function run_rolling_optimization_and_solve(cost_func, end_time::Float64, bounds
         param_matrix_loaded = DelimitedFiles.readdlm("param_matrix_$(BACKUP_ID).csv", ',', Float64)
         midpoints = vec(DelimitedFiles.readdlm("midpoints_$(BACKUP_ID).csv", ',', Float64))
         
-        # Load costs history if available, otherwise initialize with NaN
+        # Falls ein Kosten-Backup existiert, laden, ansonsten mit NaN füllen
         if isfile("costs_$(BACKUP_ID).csv")
             costs_history = vec(DelimitedFiles.readdlm("costs_$(BACKUP_ID).csv", ',', Float64))
         else
@@ -418,7 +518,7 @@ function run_rolling_optimization_and_solve(cost_func, end_time::Float64, bounds
         min_step_size = 1.0
         max_cost_threshold = 0.25
         
-        # --- ADAPTIVE  CONTROl + FALLBACK ---
+        # --- ADAPTIVE SCHRITTWEITENSTEUERUNG + FALLBACK ---
         if current_cost > max_cost_threshold
             if current_step_size <= min_step_size
                 println("⚠️ Cost is high ($current_cost > $max_cost_threshold), but minimum step size ($current_step_size) is reached. Forcing step execution!")
@@ -440,12 +540,12 @@ function run_rolling_optimization_and_solve(cost_func, end_time::Float64, bounds
             end
         end
 
-        # --- Step Accepted ---
+        # --- SCHRITT AKZEPTIERT ---
         push!(midpoints, (t_start + t_end) / 2.0)
         push!(optimized_params_history, best_x)
         push!(costs_history, current_cost)
 
-        # === Backup of optimized parameters ===
+        # === INTERNE ABSICHERUNG: BACKUP DIREKT NACH JEDEM SCHRITT SCHREIBEN ===
         param_matrix_tmp = hcat(optimized_params_history...)
         DelimitedFiles.writedlm("param_matrix_$(BACKUP_ID).csv", param_matrix_tmp, ',')
         DelimitedFiles.writedlm("midpoints_$(BACKUP_ID).csv", midpoints, ',')
@@ -460,16 +560,17 @@ function run_rolling_optimization_and_solve(cost_func, end_time::Float64, bounds
 
         push!(local_solutions_history, sol)
 
-        #plot_res(sol, x_all) # optional: plot after each accepted step to visualize the fit in the current window
-        weno_k = 2; # ordnung 2k-1   
-        
+        #plot_res(sol, x_all)
+        weno_k = 2; # ordnung 2k-1 
+        #order = 2*weno_k - 1     
+        # --- ZWISCHENPLOT DES NICHT-AUTONOMEN PROBLEMS (AB 4 INTERVALLEN) ---
         if length(midpoints) >= 5
             println("📊 [Intermediate Update] At least 5 intervals accepted. Simulating non-autonomous problem from t = 0.0 to t = $t_end...")
             num_opt_vars = length(opt_positions_filtered)
             current_param_matrix = hcat(optimized_params_history...)
 
             # ----------------------------------------------------------------
-            # RECONSTRUCTION OF INTERFACES STARTING WITH X_interfaces[1] = 0.0
+            # REKONSTRUKTION DER GITTERMETRIK MIT FIXEM STARTPUNKT X_interfaces[1] = 0.0
             # ----------------------------------------------------------------
             N_curr = length(midpoints)
             dt_mid = diff(midpoints)
@@ -541,15 +642,36 @@ function run_rolling_optimization_and_solve(cost_func, end_time::Float64, bounds
 
     return param_matrix, midpoints, local_solutions_history, costs_history
 end
+#tspan = (0.0, maximum(tref_I)); # WILL BE GLOBAL VARIABLE!
 cost_func = cost; # cost function needs to be defined in the global scope for the optimization loop
 # end_time = maximum(tref_I)
 end_time = 200.0 # for testing purposes, set to 6 months
 bounds_matrix = bounds
 max_iter = maxiteration
 initial_step_size = 1.0
-
+# 1. Optimierung ausführen
 param_matrix, midpoints, local_solutions_history, cost_history = run_rolling_optimization_and_solve(cost_func, end_time, bounds_matrix, max_iter, initial_step_size; resume_from_backup= true)
-
+# 2. Definition der nicht-autonomen P- und d-Funktionen für das finale PDSProblem
 
 include("plot_from_data.jl")  # <plots parameter curves from csv files
 include("run_rolling_forecast.jl") # <runs forecasts with different extrapolation methods and prediction horizons
+#include("run_forecasts.jl")
+
+
+## predictive checks
+# include("ForecastingTools.jl")
+# using .ForecastingTools
+
+# # --- RUN FIRST TEST: Frozen Parameters ---
+# days_test1 = ForecastingTools.test_prediction_horizon(
+#     cost, original_u0, all_models, Model_no, opt_positions_filtered, method, P, d,
+#     180.0, end_time, 0.25
+# )
+
+# # --- RUN SECOND TEST: Active WENO Extrapolation ---
+# days_test2, weno_matrix, weno_midpoints = ForecastingTools.test_prediction_horizon_weno_extrapolation(
+#     cost, original_u0, all_models, Model_no, opt_positions_filtered, method, P, d,
+#     weno3_nonuniform,
+#     180.0, end_time, 0.25
+# )
+

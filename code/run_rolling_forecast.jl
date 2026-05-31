@@ -18,7 +18,7 @@ println("------------------------------------------------------------")
 # ==============================================================================
 # SETTINGS
 # ==============================================================================
-T_forecasts = [2.0, 3.0, 5.0, 7.0, 10.0] # forecast horizons in days
+T_forecasts = [3.0, 5.0, 7.0, 10.0] # forecast horizons in days
 t_final = 180.0 # total time span for forecasts (should be covered by data)
 plot_top_M = 3 # Number of best methods to plot (set to <= 0 to plot all)
 
@@ -269,8 +269,8 @@ for T_forecast in T_forecasts
             "1a) k=2 lin"   => t -> t <= t_start ? p_eval_piecewise_constant(t, param_matrix, X_interfaces) : [local_itp_weno_k2_lin[j](t) for j in 1:num_opt_vars],
             "1a) k=3 const" => t -> t <= t_start ? p_eval_piecewise_constant(t, param_matrix, X_interfaces) : [local_itp_weno_k3_const[j](t) for j in 1:num_opt_vars],
             "1a) k=3 lin"   => t -> t <= t_start ? p_eval_piecewise_constant(t, param_matrix, X_interfaces) : [local_itp_weno_k3_lin[j](t) for j in 1:num_opt_vars],
-            "2) current" => t -> t <= t_start ? p_eval_piecewise_constant(t, param_matrix, X_interfaces) : params_2,
-            "3) predictor" => t -> t <= t_start ? p_eval_piecewise_constant(t, param_matrix, X_interfaces) : params_3
+            "2) Current Cell Avg" => t -> t <= t_start ? p_eval_piecewise_constant(t, param_matrix, X_interfaces) : params_2,
+            "3) Hist. Predictor" => t -> t <= t_start ? p_eval_piecewise_constant(t, param_matrix, X_interfaces) : params_3
         )
 
         for d in 1:Int(T_forecast)
@@ -543,8 +543,8 @@ for T_forecast in T_forecasts
         "1a) k=2 lin",
         "1a) k=3 const",
         "1a) k=3 lin",
-        "2) current",
-        "3) predictor"
+        "2) Current Cell Avg",
+        "3) Hist. Predictor"
     ]
     for d in 1:Int(T_forecast)
         push!(method_names, "1b) $(d)-Day Avg k=2 const")
@@ -761,9 +761,13 @@ for T_forecast in T_forecasts
             "v", "P", "X", "*",
             "h", "p"
         ]
+        # Fixed colors for top-3 ranks: dark green (1st), blue (2nd), orange (3rd)
+        rank_colors = ["#1a7a1a", "#1f77b4", "#ff7f0e"]
         n_methods = length(methods_list)
         for (rank, label) in enumerate(methods_list)
-            c = cmap((rank - 1) / max(n_methods - 1, 1))
+            c = rank <= length(rank_colors) ?
+                rank_colors[rank] :
+                cmap((rank - 1) / max(n_methods - 1, 1))
             ls = linestyles[mod1(rank, length(linestyles))]
             mk = markers[mod1(rank, length(markers))]
             styles_dict[label] = (c, ls, mk)
@@ -794,27 +798,30 @@ for T_forecast in T_forecasts
         )
 
     end
-
+  txt_font = 17
+    title_font = 18
+    label_font = 15
     ax.set_xlabel(
         "Forecast start time",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax.set_ylabel(
         "Relative forecast cost",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax.set_title(
         "Rolling Forecast Performance ($T_forecast Days vs Reference Solution)",
-        fontsize=14,
+        fontsize=title_font,
         fontweight="bold"
     )
 
+    ax.tick_params(axis="both", labelsize=label_font)
     ax.grid(true, linestyle=":")
-    ax.legend()
+    ax.legend(fontsize=label_font)
 
     plt.tight_layout()
 
@@ -860,24 +867,26 @@ for T_forecast in T_forecasts
 
     ax2.set_xlabel(
         "Forecast start time",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax2.set_ylabel(
         "Cost Value ($T_forecast Days Error vs Real Data)",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax2.set_title(
         "Rolling Forecast Performance ($T_forecast Days vs Real Data)",
-        fontsize=14,
+        fontsize=title_font,
         fontweight="bold"
     )
 
+    ax2.tick_params(axis="both", labelsize=label_font)
     ax2.grid(true, linestyle=":")
-    ax2.legend()
+    ax2.legend(fontsize=label_font)
+
 
     plt.tight_layout()
 
@@ -923,24 +932,25 @@ for T_forecast in T_forecasts
 
     ax3.set_xlabel(
         "Forecast start time",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax3.set_ylabel(
         "Cost Value ($T_forecast Days Error vs Real Data)",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax3.set_title(
-        "Rolling Forecast Performance ($T_forecast Days, u\u2080 shifted to match real data, S compensates)",
-        fontsize=14,
+        "Rolling Forecast Performance ($T_forecast Days, u\u2080 shifted to match real data)",
+        fontsize=title_font,
         fontweight="bold"
     )
 
+    ax3.tick_params(axis="both", labelsize=label_font)
     ax3.grid(true, linestyle=":")
-    ax3.legend()
+    ax3.legend(fontsize=label_font)
 
     plt.tight_layout()
 
@@ -956,7 +966,7 @@ for T_forecast in T_forecasts
     # ==============================================================================
     # PLOT COST EVOLUTION (NUMERICAL REFERENCE, ONLY I AND D_COVID)
     # ==============================================================================
-
+  
     println("Plotting rolling forecast costs ($T_forecast Days vs Numerical Reference, I and D_covid only)...")
 
     fig4, ax4 = plt.subplots(
@@ -986,19 +996,19 @@ for T_forecast in T_forecasts
 
     ax4.set_xlabel(
         "Forecast start time",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax4.set_ylabel(
         "Relative Error (I & D_covid)",
-        fontsize=12,
+        fontsize=txt_font,
         fontweight="bold"
     )
 
     ax4.set_title(
         "Rolling Forecast Performance ($T_forecast Days, I and D_covid vs Numerical Reference)",
-        fontsize=14,
+        fontsize=title_font,
         fontweight="bold"
     )
 
