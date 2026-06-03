@@ -6,14 +6,15 @@
 This repository contains information and code to reproduce the results presented
 in the article
 ```bibtex
+
 @online{AIM2026,
       title={Using Machine Learning to Enhance Hyperparameter Optimization in Pandemic Modeling: Case study of COVID-19 Dynamics in Ghana}, 
       author={Thomas Izgin and Andreas Meister and Isaac Azure},
       year={2026},
-      eprint={TODO},
+      eprint={2606.02650},
       archivePrefix={arXiv},
-      primaryClass={math.NA},
-      url={https://arxiv.org/abs/TODO}, 
+      primaryClass={q-bio.QM},
+      url={https://arxiv.org/abs/2606.02650}, 
 }
 ```
 
