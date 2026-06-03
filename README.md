@@ -7,7 +7,7 @@ This repository contains information and code to reproduce the results presented
 in the article
 ```bibtex
 
-@online{AIM2026,
+@online{IMA2026,
       title={Using Machine Learning to Enhance Hyperparameter Optimization in Pandemic Modeling: Case study of COVID-19 Dynamics in Ghana}, 
       author={Thomas Izgin and Andreas Meister and Isaac Azure},
       year={2026},
@@ -21,7 +21,7 @@ in the article
 If you find these results useful, please cite the article mentioned above. If you
 use the implementations provided here, please **also** cite this repository as
 ```bibtex
-@misc{AIM202&repository,
+@misc{IMA2026repository,
   title={Reproducibility repository for
          "Using Machine Learning to Enhance Hyperparameter Optimization in Pandemic Modeling: Case study of COVID-19 Dynamics in Ghana"},
   author={Izgin, Thomas and Meister, Andreas and Azure, Isaac},
